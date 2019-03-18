@@ -42,6 +42,11 @@ workflows:
           type: approval
           requires:
             - build
+          filters:
+            branches:
+              only: master
+            tags:
+              only: /release-*-alpha/
       - release:
           requires:
             - approve-release
