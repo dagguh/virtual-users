@@ -16,7 +16,9 @@ class VirtualUserBehavior private constructor(
     internal val diagnosticsLimit: Int,
     internal val browser: Class<out Browser>,
     internal val skipSetup: Boolean,
-    internal val createUsers: Boolean
+    internal val createUsers: Boolean,
+    val adminUser: String = "admin",
+    val adminPassword: String = "admin"
 ) {
 
     @Deprecated(
@@ -29,7 +31,9 @@ class VirtualUserBehavior private constructor(
         seed: Long,
         diagnosticsLimit: Int,
         browser: Class<out Browser>,
-        skipSetup: Boolean
+        skipSetup: Boolean,
+        adminUser: String = "admin",
+        adminPassword: String = "admin"
     ) : this(
         help = help,
         scenario = scenario,
@@ -51,7 +55,9 @@ class VirtualUserBehavior private constructor(
         load: VirtualUserLoad,
         seed: Long,
         diagnosticsLimit: Int,
-        browser: Class<out Browser>
+        browser: Class<out Browser>,
+        adminUser: String = "admin",
+        adminPassword: String = "admin"
     ) : this(
         help = help,
         scenario = scenario,
@@ -71,7 +77,9 @@ class VirtualUserBehavior private constructor(
         load: VirtualUserLoad,
         seed: Long,
         diagnosticsLimit: Int,
-        browser: Class<out Browser>
+        browser: Class<out Browser>,
+        adminUser: String = "admin",
+        adminPassword: String = "admin"
     ) : this(
         help = false,
         scenario = scenario,
@@ -101,6 +109,8 @@ class VirtualUserBehavior private constructor(
         private var browser: Class<out Browser> = HeadlessChromeBrowser::class.java
         private var skipSetup = false
         private var createUsers = false
+        private var adminUser: String = "admin"
+        private var adminPassword: String = "admin"
 
         fun scenario(scenario: Class<out Scenario>) = apply { this.scenario = scenario }
         fun load(load: VirtualUserLoad) = apply { this.load = load }
@@ -109,6 +119,8 @@ class VirtualUserBehavior private constructor(
         fun browser(browser: Class<out Browser>) = apply { this.browser = browser }
         fun skipSetup(skipSetup: Boolean) = apply { this.skipSetup = skipSetup }
         fun createUsers(createUsers: Boolean) = apply { this.createUsers = createUsers }
+        fun adminUser(adminUser: String) = apply { this.adminUser = adminUser }
+        fun adminPassword(adminPassword: String) = apply { this.adminPassword = adminPassword }
 
         constructor(
             behavior: VirtualUserBehavior
@@ -121,6 +133,8 @@ class VirtualUserBehavior private constructor(
             browser = behavior.browser
             skipSetup = behavior.skipSetup
             createUsers = behavior.createUsers
+            adminUser = behavior.adminUser
+            adminPassword = behavior.adminPassword
         }
 
         @Suppress("DEPRECATION")
@@ -132,7 +146,9 @@ class VirtualUserBehavior private constructor(
             diagnosticsLimit = diagnosticsLimit,
             browser = browser,
             skipSetup = skipSetup,
-            createUsers = createUsers
+            createUsers = createUsers,
+            adminUser = adminUser,
+            adminPassword = adminPassword
         )
     }
 }
