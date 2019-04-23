@@ -9,25 +9,40 @@ import com.atlassian.performance.tools.infrastructure.api.jira.JiraLaunchTimeout
 import com.atlassian.performance.tools.infrastructure.api.jira.JiraNodeConfig
 import com.atlassian.performance.tools.infrastructure.api.jvm.OracleJDK
 import com.atlassian.performance.tools.infrastructure.api.profiler.AsyncProfiler
+import com.atlassian.performance.tools.jiraactions.api.SeededRandom
+import com.atlassian.performance.tools.jiraactions.api.WebJira
+import com.atlassian.performance.tools.jiraactions.api.action.Action
+import com.atlassian.performance.tools.jiraactions.api.measure.ActionMeter
+import com.atlassian.performance.tools.jiraactions.api.memories.UserMemory
+import com.atlassian.performance.tools.jiraactions.api.scenario.Scenario
 import com.atlassian.performance.tools.ssh.api.Ssh
 import com.atlassian.performance.tools.virtualusers.api.TemporalRate
 import com.atlassian.performance.tools.virtualusers.api.VirtualUserLoad
 import com.atlassian.performance.tools.virtualusers.api.VirtualUserOptions
+import com.atlassian.performance.tools.virtualusers.api.browsers.Browser
+import com.atlassian.performance.tools.virtualusers.api.browsers.CloseableRemoteWebDriver
 import com.atlassian.performance.tools.virtualusers.api.config.VirtualUserBehavior
 import com.atlassian.performance.tools.virtualusers.api.config.VirtualUserTarget
 import com.atlassian.performance.tools.virtualusers.lib.docker.execAsResource
-import com.atlassian.performance.tools.virtualusers.lib.infrastructure.Jperf425WorkaroundMysqlDatabase
 import com.atlassian.performance.tools.virtualusers.lib.infrastructure.Jperf423WorkaroundOracleJdk
 import com.atlassian.performance.tools.virtualusers.lib.infrastructure.Jperf424WorkaroundJswDistro
+import com.atlassian.performance.tools.virtualusers.lib.infrastructure.Jperf425WorkaroundMysqlDatabase
 import com.atlassian.performance.tools.virtualusers.lib.infrastructure.SshJiraNode
 import com.atlassian.performance.tools.virtualusers.lib.sshubuntu.SudoSshUbuntuContainer
 import com.atlassian.performance.tools.virtualusers.lib.sshubuntu.SudoSshUbuntuImage
 import com.github.dockerjava.api.model.ExposedPort
 import com.github.dockerjava.core.DockerClientBuilder
+import com.sun.net.httpserver.HttpHandler
+import com.sun.net.httpserver.HttpServer
 import org.junit.Test
+import org.openqa.selenium.remote.DesiredCapabilities
+import org.openqa.selenium.remote.RemoteWebDriver
+import java.net.InetSocketAddress
 import java.net.URI
 import java.time.Duration
 import java.util.*
+import java.util.concurrent.Executor
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class LoadTestIT {
@@ -156,5 +171,124 @@ class LoadTestIT {
         webApplication = jira,
         userName = "admin",
         password = "admin"
+    )
+
+    @Test
+    fun shouldTerminateDespiteTimeouts() {
+        val options = VirtualUserOptions(
+            target = VirtualUserTarget(
+                webApplication = URI("http://nonexistent-mock"),
+                userName = "u",
+                password = "p"
+            ),
+            behavior = VirtualUserBehavior.Builder(NavigatingScenario::class.java)
+                .skipSetup(true)
+                .browser(SlowBrowser::class.java)
+                .load(
+                    VirtualUserLoad.Builder()
+                        .virtualUsers(1)
+                        .hold(Duration.ZERO)
+                        .ramp(Duration.ZERO)
+                        .flat(Duration.ofSeconds(30))
+                        .build()
+                )
+                .build()
+        )
+        val loadTest = LoadTest(
+            options = options,
+            userGenerator = SuppliedUserGenerator()
+        )
+
+        loadTest.run()
+    }
+}
+
+private class SlowBrowser : Browser {
+    override fun start(): CloseableRemoteWebDriver {
+        val browserPort = 8500
+        val browser = MockHttpServer(browserPort)
+        browser.register("/session", HttpHandler { http ->
+            val sessionResponse = """
+                {
+                    "value": {
+                        "sessionId": "123",
+                        "capabilities": {}
+                    }
+                }
+                """.trimIndent()
+            http.sendResponseHeaders(200, sessionResponse.length.toLong())
+            http.responseBody.bufferedWriter().use { it.write(sessionResponse) }
+            http.close()
+        })
+        browser.register("/session/123/url", HttpHandler { http ->
+            Thread.sleep(Duration.ofSeconds(2).toMillis())
+            http.sendResponseHeaders(200, 0)
+            http.close()
+        })
+        val startedBrowser = browser.start()
+        val driver = RemoteWebDriver(browser.base.toURL(), DesiredCapabilities())
+        return object : CloseableRemoteWebDriver(driver) {
+            override fun close() {
+                super.close()
+                startedBrowser.close()
+            }
+        }
+    }
+}
+
+private class MockHttpServer(private val port: Int) {
+    private val handlers: MutableMap<String, HttpHandler> = mutableMapOf()
+    internal val base = URI("http://localhost:$port")
+
+    internal fun register(
+        context: String,
+        handler: HttpHandler
+    ): URI {
+        handlers[context] = handler
+        return base.resolve(context)
+    }
+
+    internal fun start(): AutoCloseable {
+        val executorService: ExecutorService = Executors.newCachedThreadPool()
+        val server = startHttpServer(executorService)
+        return AutoCloseable {
+            executorService.shutdownNow()
+            server.stop(2)
+        }
+    }
+
+    private fun startHttpServer(executor: Executor): HttpServer {
+        val httpServer = HttpServer.create(InetSocketAddress(port), 0)
+        httpServer.executor = executor
+
+        handlers.forEach { context, handler ->
+            httpServer.createContext(context).handler = handler
+        }
+
+        httpServer.start()
+        return httpServer
+    }
+}
+
+private class NavigatingScenario : Scenario {
+
+    override fun getLogInAction(
+        jira: WebJira,
+        meter: ActionMeter,
+        userMemory: UserMemory
+    ): Action = object : Action {
+        override fun run() {}
+    }
+
+    override fun getActions(
+        jira: WebJira,
+        seededRandom: SeededRandom,
+        meter: ActionMeter
+    ): List<Action> = listOf(
+        object : Action {
+            override fun run() {
+                jira.navigateTo("whatever")
+            }
+        }
     )
 }
