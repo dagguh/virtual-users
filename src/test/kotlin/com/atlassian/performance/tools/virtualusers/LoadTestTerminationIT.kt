@@ -13,16 +13,14 @@ import com.atlassian.performance.tools.virtualusers.api.browsers.Browser
 import com.atlassian.performance.tools.virtualusers.api.browsers.CloseableRemoteWebDriver
 import com.atlassian.performance.tools.virtualusers.api.config.VirtualUserBehavior
 import com.atlassian.performance.tools.virtualusers.api.config.VirtualUserTarget
-import com.sun.net.httpserver.HttpHandler
-import com.sun.net.httpserver.HttpServer
+import fi.iki.elonen.NanoHTTPD
+import fi.iki.elonen.NanoHTTPD.Response.Status.OK
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
 import org.openqa.selenium.remote.DesiredCapabilities
 import org.openqa.selenium.remote.RemoteWebDriver
-import java.net.InetSocketAddress
 import java.net.URI
 import java.time.Duration
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.system.measureTimeMillis
@@ -132,33 +130,16 @@ private abstract class SlowNavigationBrowser : Browser {
     abstract val shutdown: Duration
 
     override fun start(): CloseableRemoteWebDriver {
-        val browserPort = 8500 + PORT_OFFSET.getAndIncrement()
-        val browser = MockHttpServer(browserPort, shutdown)
-        browser.register("/session", HttpHandler { http ->
-            val sessionResponse = """
-                {
-                    "value": {
-                        "sessionId": "123",
-                        "capabilities": {}
-                    }
-                }
-                """.trimIndent()
-            http.sendResponseHeaders(200, sessionResponse.length.toLong())
-            http.responseBody.bufferedWriter().use { it.write(sessionResponse) }
-            http.close()
-        })
-        browser.register("/session/123/url", HttpHandler { http ->
-            Thread.sleep(navigation.toMillis())
-            http.sendResponseHeaders(200, 0)
-            http.close()
-        })
-        val startedBrowser = browser.start()
-        val driver = RemoteWebDriver(browser.base.toURL(), DesiredCapabilities())
+        val port = 8500 + PORT_OFFSET.getAndIncrement()
+        val server = MockWebDriverServer(port, navigation)
+        server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, true)
+        val driver = RemoteWebDriver(server.base.toURL(), DesiredCapabilities())
         val clazz = this::class.java
         return object : CloseableRemoteWebDriver(driver) {
             override fun close() {
                 super.close()
-                startedBrowser.close()
+                Thread.sleep(shutdown.toMillis())
+                server.stop()
                 CLOSED_BROWSERS.add(clazz)
             }
         }
@@ -169,47 +150,33 @@ private abstract class SlowNavigationBrowser : Browser {
     }
 }
 
-private class MockHttpServer(
-    private val port: Int,
-    private val shutdownSlowness: Duration
-) {
-    private val handlers: MutableMap<String, HttpHandler> = mutableMapOf()
+private class MockWebDriverServer(
+    port: Int,
+    private val navigation: Duration
+) : NanoHTTPD(port) {
     internal val base = URI("http://localhost:$port")
 
-    internal fun register(
-        context: String,
-        handler: HttpHandler
-    ): URI {
-        handlers[context] = handler
-        return base.resolve(context)
-    }
-
-    internal fun start(): AutoCloseable {
-        val executorService: ExecutorService = Executors.newCachedThreadPool {
-            Thread(it)
-                .apply { name = "mock-http" }
-                .apply { isDaemon = true }
-        }
-        val server = startHttpServer(executorService)
-        return AutoCloseable {
-            executorService.shutdownNow()
-            Thread.sleep(shutdownSlowness.toMillis())
-            server.stop(0)
-        }
-    }
-
-    private fun startHttpServer(executor: ExecutorService): HttpServer {
-        val httpServer = HttpServer.create(InetSocketAddress(port), 0)
-        httpServer.executor = executor
-
-        handlers.forEach { (context, handler) ->
-            httpServer.createContext(context).handler = handler
+    override fun serve(session: IHTTPSession): Response {
+        val path = URI(session.uri).path
+        return when {
+            path == "/session/123/url" -> {
+                Thread.sleep(navigation.toMillis())
+                newFixedLengthResponse("")
+            }
+            path.startsWith("/session") -> {
+                val sessionResponse = """
+                {
+                    "value": {
+                        "sessionId": "123",
+                        "capabilities": {}
+                    }
+                }
+                """.trimIndent()
+                newFixedLengthResponse(OK, "application/json", sessionResponse)
+            }
+            else -> super.serve(session)
         }
 
-        executor
-            .submit { httpServer.start() }
-            .get()
-        return httpServer
     }
 }
 
