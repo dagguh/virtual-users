@@ -83,13 +83,17 @@ class LoadTestTerminationIT {
         label: String
     ): TerminationResult {
         val threadGroup = ThreadGroup(label)
-        val runnable = Runnable { test.run() }
-        val parentThread = Thread(threadGroup, runnable, "parent for $label")
-        parentThread.start()
-        val testDuration = measureTimeMillis { parentThread.join() }
+        val threadName = "parent-for-$label"
+        val testDuration = measureTimeMillis {
+            Executors.newSingleThreadExecutor {
+                Thread(threadGroup, it, threadName)
+            }.submit {
+                test.run()
+            }.get()
+        }
         return TerminationResult(
             overhead = Duration.ofMillis(testDuration) - load.total,
-            blockingThreads = threadGroup.listBlockingThreads() - parentThread
+            blockingThreads = threadGroup.listBlockingThreads().filter { it.name != threadName }
         )
     }
 
@@ -189,7 +193,8 @@ private class MockHttpServer(
         val server = startHttpServer(executorService)
         return AutoCloseable {
             executorService.shutdownNow()
-            server.stop(shutdownSlowness.seconds.toInt())
+            Thread.sleep(shutdownSlowness.toMillis())
+            server.stop(0)
         }
     }
 
