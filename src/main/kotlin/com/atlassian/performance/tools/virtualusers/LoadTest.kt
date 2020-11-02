@@ -7,6 +7,7 @@ import com.atlassian.performance.tools.jiraactions.api.SeededRandom
 import com.atlassian.performance.tools.jiraactions.api.WebJira
 import com.atlassian.performance.tools.jiraactions.api.measure.ActionMeter
 import com.atlassian.performance.tools.jiraactions.api.measure.output.AppendableActionMetricOutput
+import com.atlassian.performance.tools.jiraactions.api.measure.output.ThrowawayActionMetricOutput
 import com.atlassian.performance.tools.jiraactions.api.memories.User
 import com.atlassian.performance.tools.jiraactions.api.memories.UserMemory
 import com.atlassian.performance.tools.jiraactions.api.memories.adaptive.AdaptiveUserMemory
@@ -91,7 +92,7 @@ internal class LoadTest(
         CloseableThreadContext.push("setup").use {
             browser.start().use { closeableDriver ->
                 val (driver, diagnostics) = closeableDriver.getDriver().toDiagnosableDriver()
-                val meter = ActionMeter(virtualUser = UUID.randomUUID())
+                val meter = ActionMeter.Builder(ThrowawayActionMetricOutput()).build()
                 val jira = WebJira(
                     driver = driver,
                     base = target.webApplication,
@@ -163,10 +164,9 @@ internal class LoadTest(
             userMemory.remember(
                 listOf(segment.user)
             )
-            val meter = ActionMeter(
-                virtualUser = segment.id,
-                output = AppendableActionMetricOutput(segment.output)
-            )
+            val meter = ActionMeter.Builder(AppendableActionMetricOutput(segment.output))
+                .virtualUser(segment.id)
+                .build()
             val virtualUser = createVirtualUser(jira, meter, userMemory, diagnostics)
             virtualUser.applyLoad(segment.done)
         }
