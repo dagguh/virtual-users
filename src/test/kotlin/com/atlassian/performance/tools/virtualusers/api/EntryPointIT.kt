@@ -1,5 +1,6 @@
 package com.atlassian.performance.tools.virtualusers.api
 
+import com.atlassian.performance.tools.infrastructure.api.database.MySqlDatabase
 import com.atlassian.performance.tools.infrastructure.api.dataset.Dataset
 import com.atlassian.performance.tools.infrastructure.api.dataset.HttpDatasetPackage
 import com.atlassian.performance.tools.infrastructure.api.jira.JiraHomePackage
@@ -10,7 +11,7 @@ import com.atlassian.performance.tools.virtualusers.DockerJiraFormula
 import com.atlassian.performance.tools.virtualusers.SimpleScenario
 import com.atlassian.performance.tools.virtualusers.TestVuNode
 import com.atlassian.performance.tools.virtualusers.lib.infrastructure.Jperf424WorkaroundJswDistro
-import com.atlassian.performance.tools.virtualusers.lib.infrastructure.DindMySqlDatabase
+import com.atlassian.performance.tools.virtualusers.lib.infrastructure.Jperf425WorkaroundMysqlDatabase
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Condition
 import org.junit.Test
@@ -27,12 +28,12 @@ class EntryPointIT {
         .let { bucket ->
             Dataset(
                 label = "7k issues JSW 7.2.0",
-                database = DindMySqlDatabase(
+                database = Jperf425WorkaroundMysqlDatabase(MySqlDatabase(
                     HttpDatasetPackage(
                         uri = bucket.resolve("database.tar.bz2"),
                         downloadTimeout = Duration.ofMinutes(5)
                     )
-                ),
+                )),
                 jiraHomeSource = JiraHomePackage(HttpDatasetPackage(
                     uri = bucket.resolve("jirahome.tar.bz2"),
                     downloadTimeout = Duration.ofMinutes(5)
