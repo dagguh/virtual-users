@@ -24,11 +24,11 @@ jobs:
       with:
         path: ~/.gradle
         key: v1-${{ hashFiles('build.gradle.kts') }}
-    - name: Fix Docker-In-Docker Mounts
+    - name: Fix Docker-In-Docker Mounts # https://github.com/moby/moby/issues/13742
       run: |
         df -h
         sudo systemctl stop docker
-        echo '{"cgroup-parent":"/actions_job","storage-driver":"vfs"}' | sudo tee /etc/docker/daemon.json
+        echo '{"cgroup-parent" : "/actions_job", "storage-driver" : "vfs"}' | sudo tee /etc/docker/daemon.json
         sudo systemctl start docker
         df -h
     - name: Build
