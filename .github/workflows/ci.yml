@@ -26,11 +26,16 @@ jobs:
         key: v1-${{ hashFiles('build.gradle.kts') }}
     - name: Fix Docker-In-Docker Mounts
       run: |
+        df -h
         sudo systemctl stop docker
         echo '{"cgroup-parent":"/actions_job","storage-driver":"vfs"}' | sudo tee /etc/docker/daemon.json
         sudo systemctl start docker
+        df -h
     - name: Build
       run: ./gradlew build
+    - name: How much disk?
+      if: always()
+      run: df -h
     - name: Publish Test Report
       if: always()
       uses: scacap/action-surefire-report@v1.0.5
