@@ -24,22 +24,8 @@ jobs:
       with:
         path: ~/.gradle
         key: v1-${{ hashFiles('build.gradle.kts') }}
-    - name: pull chrome
-      run: docker pull selenium/standalone-chrome-debug:3.141.59
-    - name: Fix Docker-In-Docker Mounts # https://github.com/moby/moby/issues/13742
-      run: |
-        df -h
-        sudo systemctl stop docker
-        echo '{"cgroup-parent" : "/actions_job", "storage-driver" : "vfs"}' | sudo tee /etc/docker/daemon.json
-        sudo systemctl start docker
-        df -h
-    - name: pull firefox
-      run: docker pull selenium/standalone-firefox-debug:3.141.59
     - name: Build
       run: ./gradlew build
-    - name: How much disk?
-      if: always()
-      run: df -h
     - name: Publish Test Report
       if: always()
       uses: scacap/action-surefire-report@v1.0.5
