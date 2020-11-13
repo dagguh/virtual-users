@@ -9,8 +9,10 @@ import com.atlassian.performance.tools.virtualusers.lib.docker.StartedDockerCont
 import com.atlassian.performance.tools.virtualusers.lib.docker.execAsResource
 import com.github.dockerjava.api.DockerClient
 import com.github.dockerjava.api.command.PullImageResultCallback
+import com.github.dockerjava.api.model.Bind
 import com.github.dockerjava.api.model.ExposedPort
 import com.github.dockerjava.api.model.HostConfig
+import com.github.dockerjava.api.model.Volume
 import java.time.Duration
 
 /**
@@ -33,12 +35,13 @@ class SudoSshUbuntuImage(
             .withTag("16.04")
             .exec(PullImageResultCallback())
             .awaitCompletion()
+        val dockerDaemon = "/var/run/docker.sock"
         return docker
             .createContainerCmd("rastasheep/ubuntu-sshd:16.04")
             .withHostConfig(
                 HostConfig()
                     .withPublishAllPorts(true)
-                    .withPrivileged(true)
+                    .withBinds(Bind(dockerDaemon, Volume(dockerDaemon)))
             )
             .withExposedPorts(
                 portsToExpose.map { ExposedPort.tcp(it) }
