@@ -27,8 +27,9 @@ jobs:
     - name: Fix Docker-In-Docker Mounts # https://github.com/moby/moby/issues/13742
       run: |
         df -h
+        cat /etc/docker/daemon.json
         sudo systemctl stop docker
-        echo '{"cgroup-parent" : "/actions_job", "storage-driver" : "vfs"}' | sudo tee /etc/docker/daemon.json
+        echo '{"storage-driver" : "vfs"}' | sudo tee /etc/docker/daemon.json
         sudo systemctl start docker
         df -h
     - name: Build
