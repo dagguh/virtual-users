@@ -122,6 +122,9 @@ tasks.wrapper {
 tasks.withType<Test> {
     testLogging.exceptionFormat = TestExceptionFormat.FULL
     maxHeapSize = "256m"
+    reports {
+        junitXml.isEnabled = true
+    }
 }
 
 tasks.getByName("test", Test::class).apply {
